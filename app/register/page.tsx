@@ -101,7 +101,7 @@ export default function RegisterPage() {
   const tier2 = orgs.filter((o) => o.kind !== "center");
 
   return (
-    <AuthLayout title="Đăng ký tài khoản" subtitle="Khuôn mặt là phương thức đăng nhập chính; email Google là phương án dự phòng.">
+    <AuthLayout title="Tạo tài khoản Mạch" subtitle="Khuôn mặt là chìa khoá chính. Email Google là chìa khoá dự phòng khi không dùng được camera.">
       <ol className="stepper" aria-label="Các bước đăng ký">
         {STEPS.map((s, i) => (
           <li key={s} className={step === i + 1 ? "is-current" : step > i + 1 ? "is-done" : ""} aria-current={step === i + 1 ? "step" : undefined}>
@@ -149,6 +149,9 @@ export default function RegisterPage() {
             onFallback={() => setCameraBlocked(true)}
             fallbackLabel="Không mở được camera?"
           />
+          <p className="center xsmall muted">
+            <Link href="/faceid-check">Kiểm tra camera & Face ID trên thiết bị này</Link>
+          </p>
           {cameraBlocked && (
             <div className="banner banner-info">
               Đăng ký lần đầu <strong>bắt buộc</strong> quét khuôn mặt để chống giả mạo. Hãy mở trang này trên thiết bị có

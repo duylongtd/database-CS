@@ -2,72 +2,60 @@ import * as THREE from "three";
 import type { DatabaseSystem, Org } from "@/lib/types";
 
 export type NodeLayout = { id: string; pos: THREE.Vector3; tier: number; angle: number };
-export type DbLayout = { id: string; orgId: string; pos: THREE.Vector3 };
+export type DbLayout = { id: string; orgId: string; pos: THREE.Vector3; tables: number };
+export type LinkKind = "structure" | "lgsp" | "sync";
 export type Link = {
-  id: string;
-  kind: "structure" | "lgsp" | "sync";
-  from: string; // org id hoặc db id
-  to: string;
-  curve: THREE.Curve<THREE.Vector3>;
-  /** Các org liên quan – dùng để làm nổi bật khi chọn. */
-  orgs: string[];
+  kind: LinkKind;
+  /** Các điểm lấy mẫu dọc đường cong (x,y,z liên tiếp) – dùng cho cả vẽ đường và chạy xung. */
+  pts: Float32Array;
+  /** Org liên quan – dùng để làm nổi bật khi chọn. */
+  orgA: string;
+  orgB: string;
 };
 
 const RING_MAIN = 11;
 const RING_OUTER = 17;
+const SAMPLES = 16; // số đoạn cho mỗi đường cong
+const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 
 /**
- * Bố cục "chòm sao":
- *  - Tâm: trục LGSP (hub) – nơi mọi đường truyền dữ liệu hội tụ.
- *  - Tầng trên: HĐND & UBND (gốc).
- *  - Vành chính: các sở / văn phòng / thanh tra.
- *  - Vành ngoài: trung tâm, đơn vị trực thuộc (đặt gần góc của cơ quan cha).
- *  - CSDL: các khối trụ bao quanh cơ quan sở hữu.
+ * Bố cục "dãy núi – dòng sông":
+ *  - Tâm: dòng chính LGSP.
+ *  - Tầng trên: HĐND & UBND.
+ *  - Vành chính: các sở / văn phòng / thanh tra. Vành ngoài: đơn vị trực thuộc (gần góc cơ quan cha).
+ *  - CSDL: xếp theo xoắn ốc hướng dương (phyllotaxis) cạnh cơ quan sở hữu → không bao giờ chồng lên nhau
+ *    và vẫn gọn khi một cơ quan có hàng trăm CSDL.
  */
 export function computeLayout(orgs: Org[], dbs: DatabaseSystem[], hubDbId: string) {
+  const byId = new Map(orgs.map((o) => [o.id, o]));
+  const children = new Map<string, Org[]>();
+  orgs.forEach((o) => {
+    if (o.parentId && byId.has(o.parentId)) children.set(o.parentId, [...(children.get(o.parentId) ?? []), o]);
+  });
   const nodes = new Map<string, NodeLayout>();
-  const roots = orgs.filter((o) => !o.parentId || !orgs.some((p) => p.id === o.parentId));
-  const tier2 = orgs.filter((o) => o.parentId && roots.some((r) => r.id === o.parentId));
-  const rest = orgs.filter((o) => !roots.includes(o) && !tier2.includes(o));
+  const roots = orgs.filter((o) => !o.parentId || !byId.has(o.parentId));
 
   roots.forEach((o, i) => {
     const x = (i - (roots.length - 1) / 2) * 7;
     nodes.set(o.id, { id: o.id, pos: new THREE.Vector3(x, 6.5, 0), tier: 1, angle: Math.PI / 2 });
   });
-
-  // Nhóm tier-2 theo gốc để các cơ quan cùng khối nằm cạnh nhau trên vành.
-  const ordered = roots.flatMap((r) => tier2.filter((o) => o.parentId === r.id));
-  ordered.forEach((o, i) => {
-    const angle = (i / Math.max(1, ordered.length)) * Math.PI * 2 - Math.PI / 2;
-    nodes.set(o.id, {
-      id: o.id,
-      pos: new THREE.Vector3(Math.cos(angle) * RING_MAIN, 0, Math.sin(angle) * RING_MAIN),
-      tier: 2,
-      angle,
-    });
+  const ring = roots.flatMap((r) => children.get(r.id) ?? []);
+  ring.forEach((o, i) => {
+    const angle = (i / Math.max(1, ring.length)) * Math.PI * 2 - Math.PI / 2;
+    nodes.set(o.id, { id: o.id, pos: new THREE.Vector3(Math.cos(angle) * RING_MAIN, 0, Math.sin(angle) * RING_MAIN), tier: 2, angle });
   });
-
-  // Tier 3+ – toả ra quanh góc của cha
-  const placeChildren = (parentId: string, depth: number) => {
-    const parent = nodes.get(parentId);
-    if (!parent) return;
-    const kids = rest.filter((o) => o.parentId === parentId);
-    const spread = 0.2;
+  const place = (parentId: string, depth: number) => {
+    const parent = nodes.get(parentId)!;
+    const kids = (children.get(parentId) ?? []).filter((k) => !nodes.has(k.id));
     kids.forEach((o, i) => {
-      const angle = parent.angle + (i - (kids.length - 1) / 2) * spread;
+      const angle = parent.angle + (i - (kids.length - 1) / 2) * 0.2;
       const r = RING_OUTER + (depth - 3) * 4;
-      nodes.set(o.id, {
-        id: o.id,
-        pos: new THREE.Vector3(Math.cos(angle) * r, -1.6 - (i % 2) * 0.9, Math.sin(angle) * r),
-        tier: depth,
-        angle,
-      });
-      placeChildren(o.id, depth + 1);
+      nodes.set(o.id, { id: o.id, pos: new THREE.Vector3(Math.cos(angle) * r, -1.6 - (i % 2) * 0.9, Math.sin(angle) * r), tier: depth, angle });
+      place(o.id, depth + 1);
     });
   };
-  tier2.forEach((o) => placeChildren(o.id, 3));
-  roots.forEach((o) => placeChildren(o.id, 2.5));
-  // Phòng trường hợp dữ liệu lỗi (org mồ côi) – đặt trên vòng xa để không bị mất
+  ring.forEach((o) => place(o.id, 3));
+  roots.forEach((o) => place(o.id, 3));
   orgs.forEach((o, i) => {
     if (!nodes.has(o.id)) {
       const angle = (i / orgs.length) * Math.PI * 2;
@@ -75,60 +63,65 @@ export function computeLayout(orgs: Org[], dbs: DatabaseSystem[], hubDbId: strin
     }
   });
 
-  // CSDL quanh cơ quan
+  // CSDL
   const dbNodes = new Map<string, DbLayout>();
-  const hubPos = new THREE.Vector3(0, 0, 0);
   const byOrg = new Map<string, DatabaseSystem[]>();
   dbs.forEach((d) => {
-    if (d.id === hubDbId) return;
-    byOrg.set(d.orgId, [...(byOrg.get(d.orgId) ?? []), d]);
+    if (d.id !== hubDbId && nodes.has(d.orgId)) byOrg.set(d.orgId, [...(byOrg.get(d.orgId) ?? []), d]);
   });
   byOrg.forEach((list, orgId) => {
-    const n = nodes.get(orgId);
-    if (!n) return;
-    const tier1 = n.tier === 1;
-    const out = tier1 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(Math.cos(n.angle), 0, Math.sin(n.angle));
-    const tangent = tier1 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(-Math.sin(n.angle), 0, Math.cos(n.angle));
+    const n = nodes.get(orgId)!;
+    const top = n.tier === 1;
+    const out = top ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(Math.cos(n.angle), 0, Math.sin(n.angle));
+    const tan = top ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(-Math.sin(n.angle), 0, Math.cos(n.angle));
+    const spacing = 0.78;
+    const radiusMax = spacing * Math.sqrt(list.length);
+    const center = n.pos.clone().addScaledVector(out, 1.5 + radiusMax).add(new THREE.Vector3(0, top ? 0.2 : -1, 0));
     list.forEach((d, i) => {
-      const off = (i - (list.length - 1) / 2) * 1.05;
-      const pos = n.pos
-        .clone()
-        .addScaledVector(out, tier1 ? 1.6 : 1.9)
-        .addScaledVector(tangent, off)
-        .add(new THREE.Vector3(0, tier1 ? 0 : -0.9, 0));
-      dbNodes.set(d.id, { id: d.id, orgId, pos });
+      const r = spacing * Math.sqrt(i + 0.5);
+      const a = i * GOLDEN;
+      const pos = center.clone().addScaledVector(tan, Math.cos(a) * r).addScaledVector(out, Math.sin(a) * r);
+      dbNodes.set(d.id, { id: d.id, orgId, pos, tables: Math.max(1, d.tables.length) });
     });
   });
 
   // Liên kết
   const links: Link[] = [];
-  const arc = (a: THREE.Vector3, b: THREE.Vector3, lift: number) => {
+  const hub = new THREE.Vector3(0, 0, 0);
+  const tmp = new THREE.Vector3();
+  const sample = (a: THREE.Vector3, b: THREE.Vector3, lift: number, segs: number) => {
     const mid = a.clone().add(b).multiplyScalar(0.5);
     mid.y += lift;
-    return new THREE.QuadraticBezierCurve3(a.clone(), mid, b.clone());
+    const c = new THREE.QuadraticBezierCurve3(a, mid, b);
+    const arr = new Float32Array((segs + 1) * 3);
+    for (let i = 0; i <= segs; i++) {
+      c.getPoint(i / segs, tmp);
+      arr[i * 3] = tmp.x;
+      arr[i * 3 + 1] = tmp.y;
+      arr[i * 3 + 2] = tmp.z;
+    }
+    return arr;
   };
   orgs.forEach((o) => {
     const a = nodes.get(o.id);
     const b = o.parentId ? nodes.get(o.parentId) : undefined;
-    if (a && b) {
-      links.push({ id: `s:${o.id}`, kind: "structure", from: o.id, to: o.parentId!, curve: new THREE.LineCurve3(a.pos.clone(), b.pos.clone()), orgs: [o.id, o.parentId!] });
-    }
+    if (a && b) links.push({ kind: "structure", pts: new Float32Array([...a.pos.toArray(), ...b.pos.toArray()]), orgA: o.id, orgB: o.parentId! });
   });
+  const dbById = new Map(dbs.map((d) => [d.id, d]));
   dbs.forEach((d) => {
     const p = dbNodes.get(d.id);
     if (!p) return;
-    if (d.viaLgsp) {
-      links.push({ id: `l:${d.id}`, kind: "lgsp", from: d.id, to: hubDbId, curve: arc(p.pos, hubPos, 2.2), orgs: [d.orgId] });
-    }
+    const top = p.pos.clone().setY(p.pos.y + p.tables * 0.125);
+    if (d.viaLgsp) links.push({ kind: "lgsp", pts: sample(top, hub, 2.2, SAMPLES), orgA: d.orgId, orgB: d.orgId });
     d.links.forEach((other) => {
       const q = dbNodes.get(other);
-      const od = dbs.find((x) => x.id === other);
-      if (!q || !od || d.id > other && od.links.includes(d.id)) return; // tránh vẽ trùng 2 chiều
-      links.push({ id: `y:${d.id}:${other}`, kind: "sync", from: d.id, to: other, curve: arc(p.pos, q.pos, 4 + p.pos.distanceTo(q.pos) * 0.18), orgs: [d.orgId, od.orgId] });
+      const od = dbById.get(other);
+      if (!q || !od || (d.id > other && od.links.includes(d.id))) return; // bỏ cạnh trùng 2 chiều
+      links.push({ kind: "sync", pts: sample(top, q.pos.clone().setY(q.pos.y + q.tables * 0.125), 4 + p.pos.distanceTo(q.pos) * 0.18, SAMPLES), orgA: d.orgId, orgB: od.orgId });
     });
   });
 
-  return { nodes, dbNodes, links, hubPos };
+  return { nodes, dbNodes, links };
 }
 
 export function hasWebGL(): boolean {

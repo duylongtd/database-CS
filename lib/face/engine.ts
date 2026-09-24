@@ -6,43 +6,60 @@ type FaceApi = typeof import("@vladmandic/face-api");
 
 let apiPromise: Promise<FaceApi> | null = null;
 let backendName = "";
+let modelSource = "";
+let loadMs = 0;
 
 export class FaceEngineError extends Error {}
+
+/** Nguồn model: ưu tiên file tự host (cùng domain, đã commit vào repo), dự phòng CDN nếu deploy thiếu /models. */
+const MODEL_SOURCES = ["/models", "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model"];
+
+type Tf = {
+  setBackend: (b: string) => Promise<boolean>;
+  ready: () => Promise<void>;
+  getBackend: () => string;
+};
+
+async function useBackend(tf: Tf, order: string[]) {
+  for (const b of order) {
+    try {
+      if (await tf.setBackend(b)) {
+        await tf.ready();
+        return tf.getBackend();
+      }
+    } catch {
+      /* thử backend kế tiếp */
+    }
+  }
+  return tf.getBackend();
+}
 
 export function loadFaceEngine(): Promise<FaceApi> {
   if (apiPromise) return apiPromise;
   apiPromise = (async () => {
+    const t0 = performance.now();
     const faceapi = await import("@vladmandic/face-api");
-    const tf = faceapi.tf as unknown as {
-      setBackend: (b: string) => Promise<boolean>;
-      ready: () => Promise<void>;
-      getBackend: () => string;
-      env: () => { set: (k: string, v: unknown) => void };
-    };
-    // Ưu tiên WebGL (GPU). Máy yếu/không có WebGL → CPU (chậm hơn nhưng vẫn chạy).
-    for (const b of ["webgl", "cpu"]) {
+    const tf = faceapi.tf as unknown as Tf;
+    // Ưu tiên WebGL (GPU). Máy không có WebGL → CPU (chậm hơn nhưng vẫn chạy).
+    backendName = await useBackend(tf, ["webgl", "cpu"]);
+    let lastErr: unknown;
+    for (const src of MODEL_SOURCES) {
       try {
-        if (await tf.setBackend(b)) {
-          await tf.ready();
-          break;
-        }
-      } catch {
-        /* thử backend kế tiếp */
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(src),
+          faceapi.nets.faceLandmark68Net.loadFromUri(src),
+          faceapi.nets.faceRecognitionNet.loadFromUri(src),
+        ]);
+        modelSource = src;
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
       }
     }
-    backendName = tf.getBackend();
-    try {
-      // Giảm lỗi mất độ chính xác trên GPU di động (float16).
-      if (backendName === "webgl") tf.env().set("WEBGL_PACK", true);
-    } catch {
-      /* ignore */
-    }
-    const base = "/models";
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(base),
-      faceapi.nets.faceLandmark68Net.loadFromUri(base),
-      faceapi.nets.faceRecognitionNet.loadFromUri(base),
-    ]);
+    if (lastErr) throw lastErr;
+    await warmUp(faceapi);
+    loadMs = Math.round(performance.now() - t0);
     return faceapi;
   })().catch((e) => {
     apiPromise = null; // cho phép thử lại lần sau
@@ -51,7 +68,35 @@ export function loadFaceEngine(): Promise<FaceApi> {
   return apiPromise;
 }
 
-export const faceBackend = () => backendName;
+/**
+ * Chạy thử 1 lần trên ảnh trống để biên dịch shader GPU trước khi mở camera
+ * (lần detect đầu tiên trên điện thoại có thể mất 2–5 giây).
+ * Nếu GPU cho kết quả NaN (một số GPU di động lỗi độ chính xác), chuyển hẳn sang CPU.
+ */
+async function warmUp(faceapi: FaceApi) {
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    const ctx = c.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = "#888";
+      ctx.fillRect(0, 0, 128, 128);
+    }
+    await faceapi.detectAllFaces(c, new faceapi.TinyFaceDetectorOptions({ inputSize: 128 }));
+  } catch {
+    if (backendName !== "cpu") backendName = await useBackend(faceapi.tf as unknown as Tf, ["cpu"]);
+  }
+}
+
+/** Gọi khi phát hiện descriptor NaN trên GPU – chuyển sang CPU cho các lần sau. */
+export async function fallbackToCpu() {
+  const faceapi = await loadFaceEngine();
+  if (backendName === "cpu") return false;
+  backendName = await useBackend(faceapi.tf as unknown as Tf, ["cpu"]);
+  return true;
+}
+
+export const faceEngineInfo = () => ({ backend: backendName, modelSource, loadMs });
 
 export type Point = { x: number; y: number };
 export type FaceObservation = {
@@ -70,6 +115,10 @@ export async function detectFaces(
     .detectAllFaces(input, new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: 0.5 }))
     .withFaceLandmarks()
     .withFaceDescriptors();
+  if (res.some((r) => Number.isNaN(r.descriptor[0]))) {
+    await fallbackToCpu();
+    return [];
+  }
   return res.map((r) => ({
     box: { x: r.detection.box.x, y: r.detection.box.y, width: r.detection.box.width, height: r.detection.box.height },
     score: r.detection.score,

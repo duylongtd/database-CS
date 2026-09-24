@@ -109,6 +109,7 @@ export default function FaceScanner({ mode, onComplete, onFallback, fallbackLabe
     let eyesClosed = false;
     let livenessAt = 0;
     let turnMode = false;
+    let baseYaw = 0; // góc nhìn "thẳng" riêng của từng người/camera (camera laptop thường lệch)
     let live = false;
     const needFrontal = mode === "enroll" ? 3 : 2;
 
@@ -140,6 +141,13 @@ export default function FaceScanner({ mode, onComplete, onFallback, fallbackLabe
       if (!alive()) return;
       if (document.hidden) return void setTimeout(tick, 300);
       if (performance.now() - startedAt > SCAN_TIMEOUT_MS) {
+        if (frontal.length >= needFrontal && !live) {
+          return fail({
+            title: "Chưa xác nhận được người thật",
+            hint: "Hãy chớp mắt hoặc quay nhẹ đầu khi được yêu cầu. Ảnh chụp và video quay sẵn không được chấp nhận.",
+            canRetry: true,
+          });
+        }
         return fail({
           title: "Hết thời gian quét",
           hint: "Không nhận diện được khuôn mặt rõ ràng. Hãy ra chỗ đủ sáng, bỏ khẩu trang/kính râm, hoặc dùng Google.",
@@ -176,7 +184,7 @@ export default function FaceScanner({ mode, onComplete, onFallback, fallbackLabe
       }
       if (!alive()) return;
       const cost = performance.now() - t0;
-      if (cost > 450 && inputSize > 160) inputSize -= 64; // thiết bị yếu → giảm kích thước đầu vào
+      if (cost > 700 && inputSize > 224) inputSize -= 32; // thiết bị yếu → giảm kích thước đầu vào (không xuống dưới 224 để vẫn bắt được mặt)
 
       const vw = video.videoWidth;
       const vh = video.videoHeight;
@@ -196,8 +204,8 @@ export default function FaceScanner({ mode, onComplete, onFallback, fallbackLabe
       const cy = (f.box.y + f.box.height / 2) / vh - 0.5;
       if (ratio < 0.2) return void (setHint("Lại gần camera hơn một chút"), next());
       if (ratio > 0.8) return void (setHint("Lùi ra xa một chút"), next());
-      if (Math.abs(cx) > 0.2 || Math.abs(cy) > 0.22) return void (setHint("Đưa khuôn mặt vào giữa khung"), next());
-      if (f.score < 0.6) return void (setHint("Giữ yên, nhìn thẳng vào camera"), next());
+      if (Math.abs(cx) > 0.22 || Math.abs(cy) > 0.25) return void (setHint("Đưa khuôn mặt vào giữa khung"), next());
+      if (f.score < 0.5) return void (setHint("Giữ yên, nhìn thẳng vào camera"), next());
 
       const yaw = headYaw(f.landmarks);
       const ear = eyeAspectRatio(f.landmarks);
@@ -205,7 +213,7 @@ export default function FaceScanner({ mode, onComplete, onFallback, fallbackLabe
 
       // Bước 1: thu mẫu chính diện
       if (frontal.length < needFrontal) {
-        if (Math.abs(yaw) > 0.3) return void (setHint("Nhìn thẳng vào camera"), next());
+        if (Math.abs(yaw) > 0.38) return void (setHint("Nhìn thẳng vào camera"), next());
         if (anchor && euclidean(anchor, f.descriptor) > 0.55) {
           frontal.length = 0;
           anchor = null;
@@ -214,6 +222,7 @@ export default function FaceScanner({ mode, onComplete, onFallback, fallbackLabe
         }
         if (now - lastCapture > 280) {
           frontal.push(f.descriptor);
+          baseYaw = frontal.length === 1 ? yaw : baseYaw * 0.7 + yaw * 0.3;
           anchor ??= f.descriptor;
           lastCapture = now;
           earOpen = Math.max(earOpen, ear);
@@ -241,13 +250,14 @@ export default function FaceScanner({ mode, onComplete, onFallback, fallbackLabe
         }
         earOpen = Math.max(earOpen * 0.98, ear);
         if (!turnMode) {
+          // chớp mắt: EAR giảm mạnh so với lúc mở mắt rồi mở lại
           if (ear < Math.min(0.2, earOpen * 0.7)) eyesClosed = true;
           else if (eyesClosed && ear > earOpen * 0.85) live = true;
           if (!live && now - livenessAt > 6000) {
             turnMode = true;
             setHint("Quay nhẹ đầu sang trái hoặc phải");
           }
-        } else if (Math.abs(yaw) > 0.4) {
+        } else if (Math.abs(yaw - baseYaw) > 0.35) {
           live = true;
         }
         setProgress(0.6 + Math.min(0.3, ((now - livenessAt) / 6000) * 0.3));
@@ -256,7 +266,7 @@ export default function FaceScanner({ mode, onComplete, onFallback, fallbackLabe
       }
 
       // Bước 3: mẫu chính diện cuối sau liveness
-      if (Math.abs(yaw) > 0.3) return void (setHint("Nhìn thẳng lại vào camera"), next());
+      if (Math.abs(yaw - baseYaw) > 0.3) return void (setHint("Nhìn thẳng lại vào camera"), next());
       setStep("capture");
       if (!finish(f.descriptor)) next();
     };

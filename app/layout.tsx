@@ -4,8 +4,9 @@ import { tokensToCss } from "@/lib/design/tokens";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "CSDL Hà Tĩnh – Bản đồ cơ sở dữ liệu", template: "%s · CSDL Hà Tĩnh" },
-  description: "Bản đồ 3D các cơ sở dữ liệu của HĐND, UBND, các sở, ban, ngành và đơn vị trực thuộc tỉnh Hà Tĩnh.",
+  title: { default: "Mạch · Bản đồ dữ liệu Hà Tĩnh", template: "%s · Mạch" },
+  description: "Mạch nguồn dữ liệu đất Hồng Lam – bản đồ 3D các cơ sở dữ liệu của HĐND, UBND, các sở, ban, ngành tỉnh Hà Tĩnh.",
+  applicationName: "Mạch",
   robots: { index: false, follow: false }, // hệ thống nội bộ
 };
 
@@ -14,8 +15,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#FAF9F5" },
-    { media: "(prefers-color-scheme: dark)", color: "#262624" },
+    { media: "(prefers-color-scheme: light)", color: "#F5F7F9" },
+    { media: "(prefers-color-scheme: dark)", color: "#0B1219" },
   ],
 };
 
@@ -33,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap&subset=vietnamese"
+          href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         />
       </head>
       <body>

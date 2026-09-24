@@ -76,7 +76,7 @@ function Login() {
       setError("Quét thất bại quá nhiều lần. Face ID tạm khoá 60 giây – bạn có thể đăng nhập bằng Google.");
       setShowGoogle(true);
     } else {
-      setError(`Không tìm thấy tài khoản khớp khuôn mặt (lần ${r.fails}/${MAX_FAILS}). Hãy thử lại ở nơi đủ sáng, hoặc đăng ký nếu bạn chưa có tài khoản.`);
+      setError(`Chưa nhận ra bạn (lần ${r.fails}/${MAX_FAILS}). Hãy ra chỗ sáng hơn và nhìn thẳng vào camera, hoặc đăng ký nếu bạn chưa có tài khoản.`);
     }
   };
 
@@ -96,7 +96,7 @@ function Login() {
   const locked = lockMs > 0;
 
   return (
-    <AuthLayout title="Đăng nhập" subtitle="Xác thực bằng khuôn mặt để truy cập bản đồ cơ sở dữ liệu của tỉnh.">
+    <AuthLayout title="Chào mừng trở lại" subtitle="Nhìn vào camera để đăng nhập. Chỉ mất vài giây.">
       {notice && <div className="banner banner-info">{notice}</div>}
       {noUsers && (
         <div className="banner banner-info">
@@ -139,6 +139,9 @@ function Login() {
 
       <p className="center small">
         Chưa có tài khoản? <Link href="/register">Đăng ký bằng Face ID</Link>
+      </p>
+      <p className="center xsmall muted">
+        Face ID không chạy? <Link href="/faceid-check">Kiểm tra thiết bị</Link>
       </p>
     </AuthLayout>
   );

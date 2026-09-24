@@ -112,11 +112,11 @@ function Overview({ user, orgs, databases, onSelectOrg }: Props) {
     .slice(0, 6);
   return (
     <div className="panel-inner">
-      <p className="eyebrow">Tổng quan toàn tỉnh</p>
-      <h2 className="panel-title">Hệ sinh thái dữ liệu Hà Tĩnh</h2>
+      <p className="eyebrow">Toàn cảnh · Hà Tĩnh</p>
+      <h2 className="panel-title">Mạch nguồn dữ liệu đất Hồng Lam</h2>
       <p className="muted">
-        Mỗi khối là một cơ quan, mỗi trụ là một CSDL (số tầng = số bảng). Các đường sáng là luồng dữ liệu liên thông về
-        trục LGSP của tỉnh.
+        Mỗi đỉnh núi là một cơ quan, mỗi trụ là một CSDL – mỗi tầng một bảng. Các nhánh sông Lam đổ về dòng chính LGSP;
+        nhịp sáng màu hồng là dữ liệu đang được trao đổi.
       </p>
       <dl className="stats stats-4">
         <Stat label="Cơ quan" value={orgs.length} />
@@ -251,8 +251,8 @@ function DbCard({
                 ))}
               </div>
               <p className="small">
-                <Icon name="lock" size={14} /> Cấu trúc được bảo mật. Hệ quản trị, tên bảng và cột chỉ hiển thị với chuyên
-                viên được {orgs.find((o) => o.id === db.orgId)?.shortName ?? "cơ quan chủ quản"} cấp quyền.
+                <Icon name="lock" size={14} /> Cấu trúc CSDL này được bảo mật. Liên hệ quản trị viên để được cấp quyền đọc nếu bạn
+                là chuyên viên của {orgs.find((o) => o.id === db.orgId)?.shortName ?? "cơ quan chủ quản"}.
               </p>
             </div>
           )}
@@ -293,14 +293,15 @@ export function kindColor(kind: Org["kind"]) {
 
 export function Legend() {
   const items: [string, string][] = [
-    [nodePalette.hub, "Trục LGSP / luồng dữ liệu"],
+    [nodePalette.hub, "Dòng chính LGSP · kết nối về LGSP"],
+    [nodePalette.pulse, "Nhịp dữ liệu · liên thông trực tiếp"],
     [nodePalette.council, "HĐND"],
     [nodePalette.government, "UBND"],
     [nodePalette.office, "Văn phòng"],
-    [nodePalette.department, "Sở / liên thông CSDL"],
+    [nodePalette.department, "Sở, cơ quan chuyên môn"],
     [nodePalette.inspectorate, "Thanh tra"],
-    [nodePalette.center, "Trung tâm trực thuộc"],
-    [nodePalette.database, "CSDL (tầng = bảng)"],
+    [nodePalette.center, "Đơn vị trực thuộc"],
+    [nodePalette.database, "CSDL (mỗi tầng = 1 bảng)"],
   ];
   return (
     <section>

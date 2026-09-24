@@ -6,6 +6,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { canManage } from "@/lib/access";
 import { signOut, useStore } from "@/lib/store";
 import { ROLE_LABEL, type User } from "@/lib/types";
+import { Wordmark } from "./brand";
 import { Icon } from "./ui";
 
 export default function AppShell({ user, children, flush }: { user: User; children: ReactNode; flush?: boolean }) {
@@ -31,19 +32,15 @@ export default function AppShell({ user, children, flush }: { user: User; childr
   const nav = [
     { href: "/", label: "Bản đồ dữ liệu" },
     ...(canManage(user) ? [{ href: "/admin", label: "Quản trị" }] : []),
-    { href: "/design", label: "Design system" },
+    { href: "/brand", label: "Thương hiệu" },
     { href: "/profile", label: "Tài khoản" },
   ];
 
   return (
     <div className={`shell${flush ? " shell-flush" : ""}`}>
       <header className="topbar">
-        <Link href="/" className="brand" aria-label="Trang chủ">
-          <Logo />
-          <span className="brand-text">
-            <strong>CSDL Hà Tĩnh</strong>
-            <span className="hide-sm">Bản đồ cơ sở dữ liệu các cơ quan</span>
-          </span>
+        <Link href="/" className="brand-link" aria-label="Mạch – trang chủ">
+          <Wordmark />
         </Link>
         <nav className="nav" aria-label="Điều hướng chính">
           {nav.map((n) => (
@@ -100,23 +97,6 @@ export default function AppShell({ user, children, flush }: { user: User; childr
 }
 
 const initial = (name: string) => name.trim().split(/\s+/).pop()?.[0]?.toUpperCase() ?? "?";
-
-export function Logo() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden>
-      <circle cx="16" cy="16" r="4.2" fill="var(--c-accent)" />
-      <g stroke="var(--c-accent)" strokeWidth="1.6" strokeLinecap="round" opacity=".85">
-        <path d="M16 11.8V4M16 20.2V28M11.8 16H4M20.2 16H28M19 13l5.5-5.5M13 19l-5.5 5.5M13 13 7.5 7.5M19 19l5.5 5.5" />
-      </g>
-      <g fill="var(--c-text)">
-        <circle cx="16" cy="4" r="2" />
-        <circle cx="16" cy="28" r="2" />
-        <circle cx="4" cy="16" r="2" />
-        <circle cx="28" cy="16" r="2" />
-      </g>
-    </svg>
-  );
-}
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");

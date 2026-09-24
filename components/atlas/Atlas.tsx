@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { canViewDetail } from "@/lib/access";
 import { HUB_DB_ID } from "@/lib/seed";
 import { useStore } from "@/lib/store";
+import { stressDatabases } from "@/lib/stress";
 import { normalize } from "@/lib/text";
 import type { User } from "@/lib/types";
 import { Icon, useMediaQuery } from "../ui";
@@ -25,7 +26,12 @@ type Sheet = "peek" | "half" | "full";
 
 export default function Atlas({ user }: { user: User }) {
   const orgs = useStore((s) => s.data.orgs);
-  const databases = useStore((s) => s.data.databases);
+  const realDatabases = useStore((s) => s.data.databases);
+  const [stress, setStress] = useState(0);
+  const databases = useMemo(
+    () => (stress ? [...realDatabases, ...stressDatabases(orgs, stress)] : realDatabases),
+    [realDatabases, orgs, stress],
+  );
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [selectedDbId, setSelectedDbId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -61,6 +67,8 @@ export default function Atlas({ user }: { user: User }) {
     if (!ok) setView("list");
     // Khôi phục lựa chọn từ URL (?org=&db=) – bỏ qua id không hợp lệ
     const sp = new URLSearchParams(window.location.search);
+    const st = Number(sp.get("stress"));
+    if (st > 0) setStress(Math.min(5000, Math.floor(st)));
     const o = sp.get("org");
     const d = sp.get("db");
     if (o) {

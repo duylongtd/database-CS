@@ -1,11 +1,17 @@
-# CSDL Hà Tĩnh – Bản đồ 3D cơ sở dữ liệu các cơ quan
+# Mạch – Bản đồ dữ liệu Hà Tĩnh
+
+> Mạch nguồn dữ liệu đất Hồng Lam.
 
 Ứng dụng Next.js (chỉ frontend, không database/backend) trực quan hoá các cơ sở dữ liệu của **HĐND, UBND, các sở, ban,
-ngành và đơn vị trực thuộc tỉnh Hà Tĩnh** dưới dạng mô hình 3D (three.js): mỗi cơ quan là một khối, mỗi CSDL là một trụ
-(số tầng = số bảng), các đường sáng có "gói dữ liệu" chạy dọc thể hiện luồng liên thông về **trục LGSP** của tỉnh.
+ngành và đơn vị trực thuộc tỉnh Hà Tĩnh** dưới dạng mô hình 3D (three.js): mỗi cơ quan là một đỉnh núi, mỗi CSDL là một trụ
+(số tầng = số bảng), các nhánh sông có nhịp dữ liệu chạy dọc đổ về **dòng chính LGSP** của tỉnh.
+
+- Thương hiệu: [`docs/BRAND.md`](docs/BRAND.md) · trang `/brand`
+- Deploy & kiểm thử Face ID trên UAT: [`docs/UAT_FACEID.md`](docs/UAT_FACEID.md) · trang `/faceid-check`
+- Kiểm thử tải 3D: `/?stress=1000` (sinh CSDL giả trong bộ nhớ, không ghi dữ liệu)
 
 ```bash
-npm install        # tự sao chép model nhận diện khuôn mặt vào public/models
+npm install
 npm run dev        # http://localhost:3000
 npm run build && npm start
 ```
@@ -41,7 +47,7 @@ Sở KH&CN. Danh mục nằm ở `lib/seed.ts`; **CSDL là dữ liệu minh ho�
   email từ tài khoản Google (không có ô nhập tay) → khai báo cơ quan (chờ admin duyệt).
 - **Đăng nhập:** Face ID. Nếu camera bị che / không có / bị từ chối → đăng nhập bằng Google với email đã liên kết.
 - Chỉ lưu vector đặc trưng 128 chiều, không lưu ảnh. Nhận diện chạy hoàn toàn trên trình duyệt
-  (`@vladmandic/face-api`, model tự host ở `/models`).
+  (`@vladmandic/face-api`, model tự host ở `/models`, dự phòng CDN; tự chuyển GPU → CPU nếu GPU lỗi).
 
 ### Các trường hợp ẩn đã xử lý
 
@@ -67,16 +73,24 @@ chọn đối tượng vừa bị xoá ở tab khác · `prefers-reduced-motion`
 > ⚠️ Đây là bản giao diện không có backend: dữ liệu nằm trong localStorage và mọi kiểm tra quyền chạy phía client. Khi đưa
 > vào vận hành, cần API server để lưu trữ, xác minh chữ ký Google ID token và thực thi phân quyền.
 
-## UI/UX
+## Hiệu năng 3D
 
-Xem [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md) hoặc trang `/design` trong ứng dụng: 16 token màu × 2 chế độ,
-8 màu dữ liệu 3D, 3 họ font, 8 cỡ chữ, lưới 4px, 4 breakpoint.
+Mọi cơ quan, mọi tầng CSDL, mọi đường nối và mọi nhịp dữ liệu được vẽ bằng instancing / 1 buffer chung → **10 draw call
+cố định** dù có 40 hay 5.000 CSDL (bản đầu: 6.505 draw call với 1.000 CSDL). Trên 2.500 tầng, mỗi CSDL gộp thành 1 trụ (LOD).
+Nhãn HTML chỉ hiện cho cơ quan cấp 1–2, đối tượng đang chọn/hover và tối đa 16 kết quả tìm kiếm. `PerformanceMonitor` tự hạ
+DPR, tắt khử răng cưa và giảm số nhịp khi FPS giảm.
+
+## Thương hiệu & UI/UX
+
+Xem [`docs/BRAND.md`](docs/BRAND.md) hoặc trang `/brand`: 18 token màu × 2 chế độ, 9 màu hình khối 3D, 2 họ font
+(Be Vietnam Pro, JetBrains Mono), 8 cỡ chữ, lưới 4px, 4 breakpoint, giọng văn và ngôn ngữ 3D.
 
 ## Cấu trúc
 
 ```
-app/                 login · register · (atlas) · admin · profile · design
+app/                 login · register · (atlas) · admin · profile · brand · faceid-check
 components/atlas/    AtlasScene (three.js/R3F) · layout · InfoPanel · ListView
 components/          FaceScanner · GoogleAccountPicker · AppShell · auth · ui
-lib/                 seed (cơ quan + CSDL) · store (localStorage) · access · face/* · google · design/tokens
+lib/                 seed · store (localStorage) · access · face/* · google · brand · design/tokens · stress
+public/models/       model nhận diện khuôn mặt (tự host)
 ```
